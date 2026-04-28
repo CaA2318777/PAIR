@@ -1,0 +1,285 @@
+close all
+
+region = 'big';
+fileNumbers =   [13,306,310];
+brain_type = 'fmost hd95';
+
+allMedians = [];
+fileNames = {}; 
+inputFolder = ['F:\lab\align\xxx\', region, '_hd95_xlsx\'];
+
+
+for num = fileNumbers 
+    filePath = [inputFolder, num2str(num), '_', num2str(25), '_hd95_', region, '.xlsx'];
+    tbl = readtable(filePath, 'PreserveVariableNames', true);
+    data = table2array(tbl); % 转为数值矩阵
+
+    medians = median(data, 1, 'omitnan'); % 忽略 NaN
+    allMedians = [allMedians; medians]; % 按行追加中位数
+    fileNames = [fileNames; {filePath}]; % 保存文件路径或名字
+end
+
+
+outputHeaders = tbl.Properties.VariableNames; % 以最后一个文件的标题为最终标题
+outputTable = array2table(allMedians, 'VariableNames', outputHeaders);
+outputTable.FileName = fileNames; % 添加文件名列
+
+outputFile = [inputFolder, 'hd95_column_medians.xlsx'];
+if exist(outputFile, 'file')
+    delete(outputFile);
+    fprintf('文件 "%s" 已被成功删除。\n', outputFile);
+else
+    fprintf('文件 "%s" 不存在。\n', outputFile);
+end
+    
+writetable(outputTable, outputFile);
+fprintf('中位数计算完成，结果已保存到 %s\n', outputFile);
+
+
+
+
+%%
+%% 读取 Excel 数据
+fileName = outputFile;
+dataTable = readtable(fileName, 'PreserveVariableNames', true); % 使用 readtable 读取数据表格
+dataTable = dataTable(:, 1:(size(dataTable, 2) - 1));
+data = table2array(dataTable);  % 将数据转换为数组
+columnNames = dataTable.Properties.VariableNames; % 获取列名
+columnNames = strrep(columnNames, '_', '-'); % 将下划线替换为连字符
+
+% 数据处理
+area_num = 0;
+for i = 1:length(columnNames)
+    if strlength(columnNames{i}) <= 4
+        area_num = area_num + 1;
+        columnNames{i} = ' '; % 替换为单个空格
+    end
+end
+methods_num = length(columnNames) / area_num;
+
+
+
+%% 绘制箱型图
+figure;
+boxHandle = boxplot(data, 'Labels', columnNames, 'Whisker', 1.5, 'Colors', 'k'); 
+set(findobj(gca, 'Type', 'line'), 'LineWidth', 1.5); % 将所有线的宽度设置为 1.5
+set(findobj(gca, 'Tag', 'Outliers'), 'MarkerEdgeColor', 'k', 'MarkerFaceColor', 'k');
+hold on;
+
+% 自定义颜色（按 method 循环）
+colors = [hex2rgb('#025259'); hex2rgb('#F29325'); hex2rgb('#C08E7A')]; % 定义颜色
+numBoxes = length(columnNames);
+% 获取 box 对象并设置颜色
+h = findobj(gca, 'Tag', 'Box');
+for i = 1:length(h)
+    % 根据方法编号选择颜色
+    methodIndex = mod(length(h) - i, methods_num) + 1; 
+    color = colors(methodIndex, :);
+    % 填充颜色
+    patch('XData', get(h(i), 'XData'), ...
+          'YData', get(h(i), 'YData'), ...
+          'FaceColor', color, ...
+          'FaceAlpha', 0.7, ...
+          'EdgeColor', 'k');
+end
+
+
+% % 添加中位数标记
+means = nanmean(data, 1); % 计算每列均值
+maxs = max(data); % 计算每列均值
+
+
+root_method = columnNames{1};
+root_method = root_method(1:length(root_method)-3);
+% 设置图形样式
+xlabel('Methods');
+ylabel('Value');
+title(['Region-wise median hd95   ', root_method,'  n=',num2str(length(fileNumbers)), '  ',brain_type]);
+xtickangle(45); % 旋转 x 轴标签
+grid on;
+
+% 调整图形窗口大小
+set(gcf, 'Position', [100, 100, length(columnNames) * 50, 600]); % 窗口大小调整
+set(gca, 'FontSize', 12, 'LineWidth', 1.5); % 坐标轴样式
+% ylim([0.5, 1]);
+
+% 在图中标记特定的符号
+% symbols = {}; % 使用对钩和叉号的符号
+% markerColors = {};
+% markedBars = zeros(floor(methods_num / 3) * area_num);
+% aaa = 0;
+% for iii = methods_num - 1
+%     for kkk = 1:area_num
+%         aaa = aaa + 1;
+%         markedBars(aaa) = (kkk - 1) * methods_num + iii;
+%         if means((kkk - 1) * methods_num + iii) > means((kkk - 1) * methods_num + iii - 1)
+%             symbols{aaa} = '✓'; % 对钩符号
+%             markerColors{aaa} = 'g';
+%         else
+%             symbols{aaa} = '×'; % 叉号符号
+%             markerColors{aaa} = 'r';
+%            end
+%     end
+% end
+% 
+% for i = 1:length(markedBars)
+%     barIndex = markedBars(i);
+%     text(barIndex, maxs(barIndex) + 0.02, ... % 确保符号在顶部
+%          symbols{i}, 'Color', markerColors{i}, 'FontSize', 14, ...
+%          'HorizontalAlignment', 'center', 'FontWeight', 'bold');
+% end
+
+saveas(gcf, [inputFolder, 'hd95_median_colored_boxplot.jpg']);
+
+
+%% 画average
+average_median_dice_score = zeros(area_num,2);
+average_median_dice_score(:,1) = means([1:(methods_num):length(columnNames)]);
+average_median_dice_score(:,2) = means([2:(methods_num):length(columnNames)]);
+
+
+% average_median_dice_score(10,:) = [];%去掉DCO
+% average_median_dice_score(11,:) = [];%VCO
+
+figure;
+label = {root_method,['PAIR ',root_method]};
+boxHandle = boxplot(average_median_dice_score,'Labels',label,'Whisker', 1.5, 'Colors', 'k'); 
+set(findobj(gca, 'Type', 'line'), 'LineWidth', 1.5); % 将所有线的宽度设置为 1.5
+set(findobj(gca, 'Tag', 'Outliers'), 'MarkerEdgeColor', 'k', 'MarkerFaceColor', 'k');
+hold on;
+
+% 自定义颜色（按 method 循环）
+numBoxes = length(columnNames);
+h = findobj(gca, 'Tag', 'Box');
+for i = 1:length(h)
+    methodIndex = mod(length(h) - i, methods_num) + 1; 
+    color = colors(methodIndex, :);
+    patch('XData', get(h(i), 'XData'), ...
+          'YData', get(h(i), 'YData'), ...
+          'FaceColor', color, ...
+          'FaceAlpha', 0.7, ...
+          'EdgeColor', 'k');
+end
+
+xlabel('Methods');
+ylabel('Value');
+title(['Average median Dice score' ]);
+
+% 调整图形窗口大小
+set(gcf, 'Position', [100, 100, 300, 600]); % 窗口大小调整
+set(gca, 'FontSize', 12, 'LineWidth', 1.5); % 坐标轴样式
+% ylim([0.5, 1]);
+if strcmp(region,'big')
+%     ylim([0.5,1])
+end
+saveas(gcf, [inputFolder, 'hd95_median_average_colored_boxplot.jpg']);
+
+
+%%
+% % 读取 Excel 数据
+% fileName = outputFile;
+% dataTable = readtable(fileName,'PreserveVariableNames', true); % 使用 readtable 读取数据表格
+% dataTable = dataTable(:,1:(size(dataTable,2)-1));
+% data = table2array(dataTable);  % 将数据转换为数组
+% columnNames = dataTable.Properties.VariableNames; % 获取列名
+% columnNames = strrep(columnNames, '_', '-'); % 将下划线替换为连字符
+% 
+% data(isnan(data)) = NaN; % 确保空单元格被标记为 NaN
+% 
+% area_num = 0;
+% for i = 1:length(columnNames)
+%     if strlength(columnNames{i}) <= 4
+%         area_num = area_num+1;
+%         columnNames{i} = ' '; % 替换为单个空格
+%     end
+% end
+% methods_num
+% 
+% % 初始化
+% [numRows, numCols] = size(data); % 获取行列数
+% means = nan(1, numCols);        % 存储每列均值
+% stds = nan(1, numCols);         % 存储每列标准差
+% 
+% % 计算均值和标准差（忽略 NaN）
+% for i = 1:numCols
+%     columnData = data(:, i);     % 提取每列数据
+%     columnData = columnData(~isnan(columnData)); % 去除 NaN
+%     if ~isempty(columnData)
+%         means(i) = mean(columnData); % 计算均值
+%         stds(i) = std(columnData);   % 计算标准差
+%     end
+% end
+% 
+% % 绘制柱状图
+% figure;
+% methods_num = length(columnNames)/area_num;
+% b = bar(means, 'FaceColor', 'flat', 'EdgeColor', 'k'); % 设置为 flat 模式，允许单独修改颜色
+% hold on;
+% 
+%     % 修改柱子的颜色
+%     for i = 1:numCols
+%         if mod(i, methods_num) == 1
+%             b.CData(i, :) = hex2rgb('#A9A9A9'); 
+%         elseif  mod(i, methods_num) == 2
+%             b.CData(i, :) = hex2rgb('#E6C8AA') ; 
+%         else
+%             b.CData(i, :) = hex2rgb('#C08E7A') ; 
+%         end
+%     end
+% 
+% % 添加误差条
+% errorbar(1:numCols, means, stds, 'k.', 'LineWidth', 1.5); % 误差条
+% 
+% % 设置图形样式
+% xlabel('Methods');
+% ylabel('Value');
+% title('Bar Plot with Error Bars');
+% xticks(1:numCols);
+% xticklabels(columnNames); % 设置 x 轴刻度标签为列名
+% xtickangle(45); % 旋转 x 轴标签以避免重叠
+% grid on;
+% 
+% title(['Region: ',' ',region])
+% 
+% % 调整图形窗口大小
+% set(gcf,  'Position', [100, 100,length(columnNames)*50, 600]); % 窗口大小调整
+% set(gca, 'FontSize', 12, 'LineWidth', 1.5); % 坐标轴样式
+% ylim([0,1])
+% 
+% 
+% 
+% % 在柱状图中标记特定的柱子
+%     symbols = {}; % 使用对钩和叉号的符号
+%     markerColors = {};
+%     methods_num = length(columnNames)/area_num;
+%     aaa = 0;
+%     markedBars = zeros(floor(methods_num/3)*area_num);
+%     for iii=methods_num-1:1:methods_num 
+%             else
+%                 symbols{aaa} = '×';
+%                 markerColors{aaa} = 'r';
+%             end
+%         end
+%     end
+% 
+%     
+%     for i = 1:length(markedBars)
+%         barIndex = markedBars(i);
+%         text(barIndex, means(barIndex) + stds(barIndex) + 0.02, ... % 确保符号在柱子顶部
+%              symbols{i}, 'Color', markerColors{i}, 'FontSize', 14, ...
+%              'HorizontalAlignment', 'center', 'FontWeight', 'bold');
+%     end
+% 
+% 
+%     
+% saveas(gcf,[inputFolder,'oldmark_median.jpg'])
+% 
+
+
+%%
+function rgb = hex2rgb(hex)
+    % 将十六进制颜色转换为 RGB 格式
+    hex = char(hex); % 确保输入为字符型
+    hex = hex(2:end); % 去掉 "#" 符号
+    rgb = reshape(sscanf(hex, '%2x') / 255, 1, 3); % 转换为 RGB 格式并归一化
+end
