@@ -191,10 +191,10 @@ torch.backends.cudnn.deterministic = True
 # training parameters
 int_steps = 7
 int_downsize = 2
-lr = 5e-5
+lr = 1e-4
 weight = 1
 initial_epoch = 0
-epochs = 10
+epochs = 1000
 steps_per_epoch = 1
 
 # unet architecture
